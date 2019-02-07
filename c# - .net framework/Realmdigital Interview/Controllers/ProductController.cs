@@ -1,104 +1,50 @@
-﻿using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-using System.Net;
-using System.Web;
+﻿using System.Collections.Generic;
+using System.Threading.Tasks;
 using System.Web.Http;
-using Newtonsoft.Json;
+using BusinessLayer.Enums;
+using BusinessLayer.Interfaces;
+using BusinessLayer.Models;
 
 namespace Realmdigital_Interview.Controllers
 {
     public class ProductController
     {
+        // Typically business logic should reside in the controller, but past experience has taught me to be cautious with the code you choose
+        // to put here as it could easily bloat the class into an monolithic object that is hard for other devs to pick up and modify. I deemed
+        // the price filtering to be relevant here for reasons explained below.
+
+        IProductService _service;
+
+        public ProductController(IProductService service)
+        {
+            _service = service;
+        }
 
         [Route("product")]
-        public object GetProductById(string productId)
+        public async Task<Product> GetProductById(string productId)
         {
-            string response = "";
+            var result = await _service.GetProductById(productId);
 
-            using (var client = new WebClient())
-            {
-                client.Headers[HttpRequestHeader.ContentType] = "application/json";
-                response = client.UploadString("http://192.168.0.241/eanlist?type=Web", "POST", "{ \"id\": \"" + productId + "\" }");
-            }
-            var reponseObject = JsonConvert.DeserializeObject<List<ApiResponseProduct>>(response);
-
-            var result = new List<object>();
-            for (int i = 0; i < reponseObject.Count; i++)
-            {
-                var prices = new List<object>();
-                for (int j = 0; j < reponseObject[i].PriceRecords.Count; j++)
-                {
-                    if (reponseObject[i].PriceRecords[j].CurrencyCode == "ZAR")
-                    {
-                        prices.Add(new
-                        {
-                            Price = reponseObject[i].PriceRecords[j].SellingPrice,
-                            Currency = reponseObject[i].PriceRecords[j].CurrencyCode
-                        });
-                    }
-                }
-                result.Add(new
-                {
-                    Id = reponseObject[i].BarCode,
-                    Name = reponseObject[i].ItemName,
-                    Prices = prices
-                });
-            }
-            return result.Count > 0 ? result[0] : null;
+            // I'm unsure why the prices are being filtered here, I'm making the asumption that the filter is specific to the view.
+            // If it was a global business requirement I'd put it in the ProductService.
+            Helpers.ProductHelperFunctions.FilterPricesByCurrency(result, CurrencyCode.ZAR);
+            
+            return result;
         }
 
         [Route("product/search")]
-        public List<object> GetProductsByName(string productName)
+        public async Task<IEnumerable<Product>> GetProductsByName(string productName)
         {
-            string response = "";
+            var results = await _service.GetProductsByName(productName);
 
-            using (var client = new WebClient())
-            {
-                client.Headers[HttpRequestHeader.ContentType] = "application/json";
-                response = client.UploadString("http://192.168.0.241/eanlist?type=Web", "POST", "{ \"names\": \"" + productName + "\" }");
-            }
-            var reponseObject = JsonConvert.DeserializeObject<List<ApiResponseProduct>>(response);
+            //Same as above
+            Helpers.ProductHelperFunctions.FilterPricesByCurrency(results, CurrencyCode.ZAR);
 
-            var result = new List<object>();
-            for (int i = 0; i < reponseObject.Count; i++)
-            {
-                var prices = new List<object>();
-                for (int j = 0; j < reponseObject[i].PriceRecords.Count; j++)
-                {
-                    if (reponseObject[i].PriceRecords[j].CurrencyCode == "ZAR")
-                    {
-                        prices.Add(new
-                        {
-                            Price = reponseObject[i].PriceRecords[j].SellingPrice,
-                            Currency = reponseObject[i].PriceRecords[j].CurrencyCode
-                        });
-                    }
-                }
-                result.Add(new
-                {
-                    Id = reponseObject[i].BarCode,
-                    Name = reponseObject[i].ItemName,
-                    Prices = prices
-                });
-            }
-            return result;
+            return results;
         }
     }
 
 
 
-    class ApiResponseProduct
-    {
-        public string BarCode { get; set; }
-        public string ItemName { get; set; }
-        public List<ApiResponsePrice> PriceRecords { get; set; }
-    }
-
-    class ApiResponsePrice
-    {
-        public string SellingPrice { get; set; }
-        public string CurrencyCode { get; set; }
-    }
+    
 }
